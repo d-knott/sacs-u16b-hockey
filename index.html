@@ -280,25 +280,25 @@ html[data-theme="light"] .lb-row:hover{background:rgba(11,27,51,.026)}
 .fp.L{background:rgba(217,82,75,.85)}.fp.x{background:var(--surface-3);color:var(--ink-3)}
 
 /* ============================== ATTENDANCE MATRIX ============================== */
-.mx{overflow:auto;max-height:min(70vh,700px);position:relative}
+.mx{overflow:auto;max-height:calc(100vh - 164px);position:relative}
 .mx table{border-collapse:separate;border-spacing:0}
 .mx th,.mx td{border-bottom:1px solid var(--line-soft);padding:0}
 .mx thead th{
   position:sticky;top:0;z-index:3;background:var(--surface-1);
-  padding:8px 5px;font-size:10px;letter-spacing:.04em;text-align:center;min-width:38px;
+  padding:5px 2px;font-size:9.5px;letter-spacing:0;text-align:center;min-width:30px;
   border-bottom:1px solid var(--line);
 }
 .mx .nmc{
-  position:sticky;left:0;z-index:2;background:var(--surface-1);min-width:170px;max-width:170px;
-  padding:6px 12px;border-right:1px solid var(--line);font-size:13.2px;font-weight:600;
+  position:sticky;left:0;z-index:2;background:var(--surface-1);min-width:174px;max-width:174px;
+  padding:3px 11px;border-right:1px solid var(--line);font-size:12.8px;font-weight:600;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .mx thead .nmc{z-index:4;text-align:left}
 .mx .totc{position:sticky;right:0;z-index:2;background:var(--surface-1);border-left:1px solid var(--line);
-  min-width:52px;text-align:center;font-family:var(--hd);font-weight:700;font-size:15px;color:var(--gold-lt)}
+  min-width:46px;text-align:center;font-family:var(--hd);font-weight:700;font-size:14px;color:var(--gold-lt)}
 .mx thead .totc{z-index:4;color:var(--ink-3);font-size:11.5px}
-.cel{width:100%;height:33px;display:grid;place-items:center;font-size:12.5px;font-weight:700;
-  transition:.1s;border-radius:5px;font-family:var(--hd)}
+.cel{width:100%;height:24px;display:grid;place-items:center;font-size:11.5px;font-weight:700;
+  transition:.1s;border-radius:4px;font-family:var(--hd)}
 .cel:hover{transform:scale(1.13);z-index:5;position:relative}
 .cel.v1{background:rgba(47,163,107,.24);color:#6ADCA4}
 .cel.v2{background:rgba(47,163,107,.42);color:#8FF0C0}
@@ -404,6 +404,7 @@ html[data-theme="dark"] .pc{background:linear-gradient(165deg,rgba(255,255,255,.
   .md-row{grid-template-columns:1fr 60px 60px 44px 44px;gap:6px;padding:8px 9px}
   .modal{max-height:92vh}
   .dash-cols{grid-template-columns:minmax(0,1fr)}
+  .mx{max-height:calc(100vh - 210px)}
   .card-h{flex-wrap:wrap;gap:4px 10px}
   .card-h .hint{flex-basis:100%}
   .tiles{grid-template-columns:repeat(auto-fit,minmax(118px,1fr))}
@@ -697,6 +698,17 @@ function toast(msg, kind) {
 var S = null;          // live state
 var dirty = false, saveTimer = null, pollTimer = null, remoteOK = false, lastPush = 0;
 var migrated = false;   // set by normalise() when a versioned correction is applied
+var attTouched = false, attLeft = 0, attSuppress = false;  // training-matrix scroll memory
+function placeMatrix() {
+  var mxEl = $('#attMatrix'); if (!mxEl) return;
+  attSuppress = true;
+  requestAnimationFrame(function () {
+    if (mxEl.scrollWidth > mxEl.clientWidth) {
+      mxEl.scrollLeft = attTouched ? attLeft : mxEl.scrollWidth;
+    }
+    requestAnimationFrame(function () { attSuppress = false; });
+  });
+}
 
 function freshState() {
   var s = JSON.parse(JSON.stringify(SEED));
@@ -1169,8 +1181,16 @@ function renderTraining() {
     h += '<td class="totc num">' + sum(p.att) + '</td></tr>';
   });
   h += '</tbody></table>';
-  $('#attMatrix').innerHTML = h;
-  $$('.cel', $('#attMatrix')).forEach(function (c) {
+  var mxEl = $('#attMatrix');
+  mxEl.innerHTML = h;
+  // Open on the most recent sessions — that's what you're marking off today —
+  // but never yank the view back once the coach has scrolled somewhere.
+  mxEl.onscroll = function () {
+    if (attSuppress) return;
+    attTouched = true; attLeft = mxEl.scrollLeft;
+  };
+  placeMatrix();
+  $$('.cel', mxEl).forEach(function (c) {
     c.onclick = function () {
       var p = S.players.filter(function (x) { return x.id === c.dataset.p; })[0];
       var i = +c.dataset.i, v = p.att[i];
@@ -1197,14 +1217,16 @@ function renderFixtures() {
     '<thead><tr><th class="c" style="width:38px">#</th><th>Opponent</th><th>Date</th>' +
     '<th class="c">H/A</th><th>Venue</th><th class="c" style="width:70px">GF</th>' +
     '<th class="c" style="width:70px">GA</th><th class="c">GD</th><th class="c">Result</th>' +
-    '<th style="width:40px"></th></tr></thead><tbody>' +
+    '<th style="width:62px"></th></tr></thead><tbody>' +
     S.fixtures.map(function (f, i) {
       var r = resultOf(f), gd = (f.gf == null || f.ga == null) ? null : f.gf - f.ga;
       return '<tr>' +
         '<td class="c num" style="color:var(--ink-3)">' + (i + 1) + '</td>' +
         '<td><b style="font-weight:600">' + esc(f.opponent) + '</b>' +
           (f.friendly ? ' <span class="chip mute">Friendly</span>' : '') + '</td>' +
-        '<td style="color:var(--ink-2)">' + esc(fmtDate(f.date)) + '</td>' +
+        '<td><input type="date" data-f="' + i + '" data-k="date" value="' + esc(f.date || '') +
+          '" style="padding:5px 7px;font-size:13px;min-width:132px' +
+          (f.date ? '' : ';border-color:var(--gold-dk)') + '"></td>' +
         '<td class="c"><span class="chip">' + (f.ha || '—') + '</span></td>' +
         '<td style="color:var(--ink-2)">' + esc(f.venue || '—') + '</td>' +
         '<td class="c"><input type="number" min="0" data-f="' + i + '" data-k="gf" value="' + (f.gf == null ? '' : f.gf) + '" style="text-align:center;padding:5px"></td>' +
@@ -1212,27 +1234,20 @@ function renderFixtures() {
         '<td class="c num" style="font-weight:600;color:' + (gd > 0 ? '#5FD39B' : gd < 0 ? '#F08D87' : 'var(--ink-3)') + '">' +
           (gd == null ? '—' : (gd > 0 ? '+' : '') + gd) + '</td>' +
         '<td class="c">' + (r ? '<span class="chip ' + (r === 'W' ? 'ok' : r === 'D' ? 'gold' : 'bad') + '">' + r + '</span>' : '<span class="chip mute">TBC</span>') + '</td>' +
-        '<td class="c"><button class="x" data-delf="' + i + '" title="Remove fixture">×</button></td></tr>';
+        '<td class="c" style="white-space:nowrap">' +
+          '<button class="btn sm" data-editf="' + i + '">Edit</button></td></tr>';
     }).join('') + '</tbody>';
 
   $$('#fixTable input').forEach(function (inp) {
     inp.onchange = function () {
-      var f = S.fixtures[+inp.dataset.f];
-      f[inp.dataset.k] = inp.value === '' ? null : Math.max(0, +inp.value);
+      var f = S.fixtures[+inp.dataset.f], k = inp.dataset.k;
+      if (k === 'date') f.date = inp.value;
+      else f[k] = inp.value === '' ? null : Math.max(0, +inp.value);
       commit(); renderFixtures(); renderRecord(); renderDash(); renderMatch();
     };
   });
-  $$('#fixTable [data-delf]').forEach(function (b) {
-    b.onclick = function () {
-      var i = +b.dataset.delf;
-      confirmBox('Remove fixture', 'Delete “' + S.fixtures[i].opponent + '”? All match data recorded against it will be removed.', function () {
-        S.fixtures.splice(i, 1);
-        S.players.forEach(function (p) {
-          ['caps', 'goals', 'assists', 'cs', 'mom'].forEach(function (k) { p[k].splice(i, 1); });
-        });
-        commit(); renderAll(); toast('Fixture removed');
-      });
-    };
+  $$('#fixTable [data-editf]').forEach(function (b) {
+    b.onclick = function () { fixtureModal(+b.dataset.editf); };
   });
 }
 
@@ -1552,6 +1567,7 @@ function go(p) {
   $('#pgSub').textContent = TITLES[p][1];
   if (location.hash !== '#' + p) history.replaceState(null, '', '#' + p);
   window.scrollTo({ top: 0, behavior: 'instant' });
+  if (p === 'train') placeMatrix();
 }
 $$('#nav a, #mobnav a').forEach(function (a) {
   a.onclick = function (e) { e.preventDefault(); go(a.dataset.p); };
@@ -1596,26 +1612,76 @@ $('#btnAddSession').onclick = function () {
   };
 };
 
-$('#btnAddFixture').onclick = function () {
-  openModal('<div class="modal-h"><h3>Add fixture</h3><button class="x" data-close>×</button></div>' +
+$('#btnAddFixture').onclick = function () { fixtureModal(null); };
+
+var HA = [['H', 'Home'], ['A', 'Away'], ['N', 'Neutral'], ['', 'Not set']];
+
+function fixtureModal(i) {
+  var isNew = (i == null);
+  var f = isNew ? { opponent: '', date: '', ha: 'H', venue: '', gf: null, ga: null, friendly: false } : S.fixtures[i];
+  openModal(
+    '<div class="modal-h"><h3>' + (isNew ? 'Add fixture' : 'Edit fixture') + '</h3>' +
+      '<button class="x" data-close>×</button></div>' +
     '<div class="modal-b">' +
-      '<div class="field"><label class="f">Opponent</label><input type="text" id="xO" placeholder="e.g. Rondebosch"></div>' +
-      '<div class="row2"><div class="field"><label class="f">Date</label><input type="date" id="xD"></div>' +
-      '<div class="field"><label class="f">Home / Away</label><select id="xH"><option value="H">Home</option><option value="A">Away</option><option value="N">Neutral</option></select></div></div>' +
-      '<div class="field"><label class="f">Venue</label><input type="text" id="xV" placeholder="e.g. SACS"></div>' +
+      '<div class="field"><label class="f">Opponent</label>' +
+        '<input type="text" id="xO" value="' + esc(f.opponent) + '" placeholder="e.g. Rondebosch"></div>' +
+      '<div class="row2">' +
+        '<div class="field"><label class="f">Date</label><input type="date" id="xD" value="' + esc(f.date || '') + '"></div>' +
+        '<div class="field"><label class="f">Home / Away</label><select id="xH">' +
+          HA.map(function (h) {
+            return '<option value="' + h[0] + '"' + ((f.ha || '') === h[0] ? ' selected' : '') + '>' + h[1] + '</option>';
+          }).join('') + '</select></div>' +
+      '</div>' +
+      '<div class="field"><label class="f">Venue</label>' +
+        '<input type="text" id="xV" value="' + esc(f.venue || '') + '" placeholder="e.g. SACS"></div>' +
+      '<div class="row2">' +
+        '<div class="field"><label class="f">Goals for</label>' +
+          '<input type="number" min="0" id="xGF" value="' + (f.gf == null ? '' : f.gf) + '" placeholder="—"></div>' +
+        '<div class="field"><label class="f">Goals against</label>' +
+          '<input type="number" min="0" id="xGA" value="' + (f.ga == null ? '' : f.ga) + '" placeholder="—"></div>' +
+      '</div>' +
       '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)">' +
-      '<input type="checkbox" id="xF" style="width:auto"> Friendly</label>' +
-    '</div><div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn gold" id="xOK">Add</button></div>');
+        '<input type="checkbox" id="xF" style="width:auto"' + (f.friendly ? ' checked' : '') + '> Friendly</label>' +
+      '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0">Leave the scores blank for a fixture that ' +
+      'hasn\u2019t been played \u2014 it shows as TBC and stays out of the season record.</p>' +
+    '</div>' +
+    '<div class="modal-f">' + (isNew ? '' : '<button class="btn danger" id="xDel">Delete</button>') +
+      '<div class="spacer"></div><button class="btn" data-close>Cancel</button>' +
+      '<button class="btn gold" id="xOK">' + (isNew ? 'Add fixture' : 'Save') + '</button></div>');
+
   $('#xOK').onclick = function () {
     var o = $('#xO').value.trim(); if (!o) { toast('Name the opponent', 'err'); return; }
-    S.fixtures.push({ id: uid('f'), no: S.fixtures.length + 1, opponent: o, date: $('#xD').value,
-      ha: $('#xH').value, venue: $('#xV').value.trim(), gf: null, ga: null, friendly: $('#xF').checked });
-    S.players.forEach(function (p) {
-      ['caps', 'goals', 'assists', 'cs', 'mom'].forEach(function (k) { p[k].push(null); });
-    });
-    commit(); closeModal(); renderAll(); toast('Fixture added', 'ok');
+    var gf = $('#xGF').value === '' ? null : Math.max(0, +$('#xGF').value);
+    var ga = $('#xGA').value === '' ? null : Math.max(0, +$('#xGA').value);
+    var vals = { opponent: o, date: $('#xD').value, ha: $('#xH').value,
+                 venue: $('#xV').value.trim(), gf: gf, ga: ga, friendly: $('#xF').checked };
+    if (isNew) {
+      vals.id = uid('f'); vals.no = S.fixtures.length + 1;
+      S.fixtures.push(vals);
+      S.players.forEach(function (p) {
+        ['caps', 'goals', 'assists', 'cs', 'mom'].forEach(function (k) { p[k].push(null); });
+      });
+      toast('Fixture added', 'ok');
+    } else {
+      Object.assign(S.fixtures[i], vals);
+      toast('Fixture saved', 'ok');
+    }
+    commit(); closeModal(); renderAll();
   };
-};
+
+  if (!isNew) $('#xDel').onclick = function () { closeModal(); setTimeout(function () { delFixture(i); }, 120); };
+}
+
+function delFixture(i) {
+  confirmBox('Remove fixture', 'Delete \u201c' + S.fixtures[i].opponent + '\u201d? All match data recorded ' +
+    'against it \u2014 caps, goals, assists, clean sheets and MOM \u2014 will be removed too.', function () {
+    S.fixtures.splice(i, 1);
+    S.players.forEach(function (p) {
+      ['caps', 'goals', 'assists', 'cs', 'mom'].forEach(function (k) { p[k].splice(i, 1); });
+    });
+    commit(); renderAll(); toast('Fixture removed');
+  });
+}
 
 $('#btnAddCulture').onclick = function () {
   var opts = S.players.filter(function (p) { return p.status !== 'Dropped'; })
