@@ -191,6 +191,12 @@ html[data-theme="dark"] .card{background:linear-gradient(170deg,rgba(255,255,255
 .chip.gold{color:var(--gold-lt);border-color:rgba(201,150,58,.4);background:rgba(201,150,58,.12)}
 .chip.mute{color:var(--ink-3)}
 .chip.bad{color:#F08D87;border-color:rgba(217,82,75,.35);background:rgba(217,82,75,.12)}
+.chip.so{color:#9FB6FF;border-color:rgba(120,150,235,.45);background:rgba(120,150,235,.16);font-weight:700;
+  letter-spacing:.09em;padding:2.5px 6px}
+html[data-theme="light"] .chip.so{color:#3B4FA8;border-color:rgba(74,58,167,.32);background:rgba(74,58,167,.1)}
+.fp.so{position:relative}
+.fp.so::after{content:"";position:absolute;right:2px;bottom:2px;width:5px;height:5px;border-radius:50%;
+  background:#9FB6FF;box-shadow:0 0 0 1.5px rgba(0,0,0,.35)}
 .chip.cup{color:#F0C877;border-color:rgba(201,150,58,.45);background:rgba(201,150,58,.16);font-weight:700}
 html[data-theme="light"] .chip.cup{color:#8A6316;border-color:rgba(201,150,58,.5);background:rgba(201,150,58,.14)}
 .chip.jny{color:#9FB6FF;border-color:rgba(120,150,235,.4);background:rgba(120,150,235,.13);cursor:help}
@@ -308,6 +314,13 @@ html[data-theme="light"] .lb-row:hover{background:rgba(11,27,51,.026)}
 .cel.v0{background:rgba(217,82,75,.15);color:#E5877F}
 .cel.vN{color:var(--ink-3);opacity:.3}
 .mx tbody tr:hover .nmc{background:var(--surface-3)}
+/* make the frozen columns read as frozen: an edge shadow once there's
+   something scrolled underneath them */
+.mx .nmc,.mx .totc{transition:box-shadow .15s}
+.mx.sx-l .nmc{box-shadow:7px 0 11px -7px rgba(0,0,0,.8)}
+.mx.sx-r .totc{box-shadow:-7px 0 11px -7px rgba(0,0,0,.8)}
+html[data-theme="light"] .mx.sx-l .nmc{box-shadow:7px 0 11px -8px rgba(11,27,51,.5)}
+html[data-theme="light"] .mx.sx-r .totc{box-shadow:-7px 0 11px -8px rgba(11,27,51,.5)}
 
 /* ============================== SQUAD CARDS ============================== */
 .sq{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:13px}
@@ -729,8 +742,15 @@ function placeMatrix() {
     if (mxEl.scrollWidth > mxEl.clientWidth) {
       mxEl.scrollLeft = attTouched ? attLeft : mxEl.scrollWidth;
     }
+    shadeMatrix();
     requestAnimationFrame(function () { attSuppress = false; });
   });
+}
+function shadeMatrix() {
+  var mxEl = $('#attMatrix'); if (!mxEl) return;
+  var max = mxEl.scrollWidth - mxEl.clientWidth;
+  mxEl.classList.toggle('sx-l', mxEl.scrollLeft > 1);
+  mxEl.classList.toggle('sx-r', max > 1 && mxEl.scrollLeft < max - 1);
 }
 
 function freshState() {
@@ -752,7 +772,8 @@ function normalise(s) {
 
   s.fixtures.forEach(function (f) {
     if (!f.comp) f.comp = f.friendly ? 'friendly' : 'league';
-    if (f.comp !== 'tournament') f.tournament = '';
+    if (f.comp !== 'tournament') { f.tournament = ''; f.so = null; }
+    if (f.so !== 'W' && f.so !== 'L') f.so = null;
     f.friendly = (f.comp === 'friendly');
   });
 
@@ -864,14 +885,31 @@ function seasonStats(list) {
   (list || S.fixtures).forEach(function (f) {
     if (f.gf == null || f.ga == null) return;
     played++; gf += +f.gf; ga += +f.ga;
-    if (+f.gf > +f.ga) w++; else if (+f.gf < +f.ga) l++; else d++;
+    var r = resultOf(f);
+    if (r === 'W') w++; else if (r === 'L') l++; else d++;
   });
   return { played: played, w: w, d: d, l: l, gf: gf, ga: ga, gd: gf - ga,
            pct: played ? Math.round(w / played * 100) : 0 };
 }
+function levelTournament(f) {
+  return compOf(f) === 'tournament' && f.gf != null && f.ga != null && +f.gf === +f.ga;
+}
+function shootout(f) {
+  return levelTournament(f) && (f.so === 'W' || f.so === 'L') ? f.so : null;
+}
 function resultOf(f) {
   if (f.gf == null || f.ga == null) return null;
-  return +f.gf > +f.ga ? 'W' : (+f.gf < +f.ga ? 'L' : 'D');
+  if (+f.gf > +f.ga) return 'W';
+  if (+f.gf < +f.ga) return 'L';
+  return shootout(f) || 'D';          // shootout decides a level tournament game
+}
+function resultChip(f) {
+  var r = resultOf(f);
+  if (!r) return '<span class="chip mute">TBC</span>';
+  var so = shootout(f);
+  return '<span class="chip ' + (r === 'W' ? 'ok' : r === 'D' ? 'gold' : 'bad') + '">' + r + '</span>' +
+    (so ? ' <span class="chip so" title="' + (so === 'W' ? 'Won' : 'Lost') + ' on shootout after a ' +
+      f.gf + '\u2013' + f.ga + ' draw">SO</span>' : '');
 }
 
 /* ─────────────── persistence ─────────────── */
@@ -1025,7 +1063,9 @@ function renderDash() {
   var done = S.fixtures.filter(function (f) { return resultOf(f); });
   $('#dashForm').innerHTML = done.slice(-12).map(function (f) {
     var r = resultOf(f);
-    return '<div class="fp ' + r + '" title="' + esc(f.opponent) + ' ' + f.gf + '–' + f.ga + '">' + r + '</div>';
+    var so = shootout(f);
+    return '<div class="fp ' + r + (so ? ' so' : '') + '" title="' + esc(f.opponent) + ' ' + f.gf + '–' + f.ga +
+      (so ? ' (' + (so === 'W' ? 'won' : 'lost') + ' on shootout)' : '') + '">' + r + '</div>';
   }).join('') || '<span style="color:var(--ink-3)">No results yet.</span>';
 
   // scorers
@@ -1046,7 +1086,7 @@ function renderDash() {
       var r = resultOf(f);
       return '<tr><td>' + esc(f.opponent) + '</td>' +
         '<td class="c num" style="font-weight:600">' + f.gf + '–' + f.ga + '</td>' +
-        '<td class="c"><span class="chip ' + (r === 'W' ? 'ok' : r === 'D' ? 'gold' : 'bad') + '">' + r + '</span></td></tr>';
+        '<td class="c" style="white-space:nowrap">' + resultChip(f) + '</td></tr>';
     }).join('') || '<tr><td colspan="3" style="color:var(--ink-3)">No results yet.</td></tr>') + '</tbody>';
 
   renderAttChart();
@@ -1215,6 +1255,7 @@ function renderTraining() {
   // Open on the most recent sessions — that's what you're marking off today —
   // but never yank the view back once the coach has scrolled somewhere.
   mxEl.onscroll = function () {
+    shadeMatrix();
     if (attSuppress) return;
     attTouched = true; attLeft = mxEl.scrollLeft;
   };
@@ -1276,14 +1317,20 @@ function renderFixtures() {
     ? '<div class="card"><div class="card-h"><h3>By competition</h3></div>' +
       '<div class="card-b flush"><div class="tw"><table><thead><tr><th>Competition</th>' +
       '<th class="n">P</th><th class="n">W</th><th class="n">D</th><th class="n">L</th>' +
-      '<th class="n">GF</th><th class="n">GA</th><th class="n">GD</th></tr></thead><tbody>' +
+      '<th class="n">GF</th><th class="n">GA</th><th class="n">GD</th>' +
+      '<th class="n" title="Games decided on a shootout">SO</th></tr></thead><tbody>' +
       groups.map(function (g) {
         var t = seasonStats(g.list);
         return '<tr><td><b style="font-weight:600">' + esc(g.k) + '</b></td>' +
           '<td class="n">' + t.played + '</td><td class="n" style="color:#5FD39B">' + t.w + '</td>' +
           '<td class="n">' + t.d + '</td><td class="n" style="color:#F08D87">' + t.l + '</td>' +
           '<td class="n">' + t.gf + '</td><td class="n">' + t.ga + '</td>' +
-          '<td class="n" style="font-weight:600">' + (t.gd > 0 ? '+' : '') + t.gd + '</td></tr>';
+          '<td class="n" style="font-weight:600">' + (t.gd > 0 ? '+' : '') + t.gd + '</td>' +
+          '<td class="n" style="color:var(--ink-3)">' + (function () {
+            var sw = g.list.filter(function (x) { return shootout(x) === 'W'; }).length;
+            var sl = g.list.filter(function (x) { return shootout(x) === 'L'; }).length;
+            return (sw || sl) ? (sw + 'W' + (sl ? ' ' + sl + 'L' : '')) : '—';
+          })() + '</td></tr>';
       }).join('') + '</tbody></table></div></div></div>'
     : '';
 
@@ -1325,7 +1372,9 @@ function renderFixtures() {
         '<td class="c"><input type="number" min="0" data-f="' + i + '" data-k="ga" value="' + (f.ga == null ? '' : f.ga) + '" style="text-align:center;padding:5px"></td>' +
         '<td class="c num" style="font-weight:600;color:' + (gd > 0 ? '#5FD39B' : gd < 0 ? '#F08D87' : 'var(--ink-3)') + '">' +
           (gd == null ? '—' : (gd > 0 ? '+' : '') + gd) + '</td>' +
-        '<td class="c">' + (r ? '<span class="chip ' + (r === 'W' ? 'ok' : r === 'D' ? 'gold' : 'bad') + '">' + r + '</span>' : '<span class="chip mute">TBC</span>') + '</td>' +
+        '<td class="c" style="white-space:nowrap">' + resultChip(f) +
+          (levelTournament(f) && !shootout(f)
+            ? ' <button class="btn sm" data-so="' + i + '" title="Decided on a shootout?">+SO</button>' : '') + '</td>' +
         '<td class="c" style="white-space:nowrap">' +
           '<button class="btn sm" data-editf="' + i + '">Edit</button></td></tr>';
     }).join('') : '<tr><td colspan="11" class="empty">No fixtures in this competition.</td></tr>') + '</tbody>';
@@ -1343,14 +1392,40 @@ function renderFixtures() {
       var f = S.fixtures[+sel.dataset.comp], v = sel.value;
       if (v === 'new') { renderFixtures(); newTournament(+sel.dataset.comp); return; }
       if (v.indexOf('t:') === 0) { f.comp = 'tournament'; f.tournament = v.slice(2); }
-      else { f.comp = v; f.tournament = ''; }
+      else { f.comp = v; f.tournament = ''; f.so = null; }
       f.friendly = (f.comp === 'friendly');
-      commit(); renderFixtures(); renderDash();
+      commit(); renderFixtures(); renderRecord(); renderDash();
     };
+  });
+  $$('#fixTable [data-so]').forEach(function (b) {
+    b.onclick = function () { shootoutModal(+b.dataset.so); };
   });
   $$('#fixTable [data-editf]').forEach(function (b) {
     b.onclick = function () { fixtureModal(+b.dataset.editf); };
   });
+}
+
+function shootoutModal(i) {
+  var f = S.fixtures[i];
+  openModal('<div class="modal-h"><h3>Shootout</h3><button class="x" data-close>×</button></div>' +
+    '<div class="modal-b">' +
+      '<p style="margin:0 0 14px;color:var(--ink-2)">' + esc(f.opponent) + ' finished ' + f.gf + '\u2013' + f.ga +
+      '. How did the shootout go?</p>' +
+      '<div class="field" style="margin:0"><label class="f">Shootout result</label><select id="soV">' +
+        '<option value="">Not decided on a shootout</option>' +
+        '<option value="W"' + (f.so === 'W' ? ' selected' : '') + '>Won the shootout</option>' +
+        '<option value="L"' + (f.so === 'L' ? ' selected' : '') + '>Lost the shootout</option>' +
+      '</select></div>' +
+      '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0">The score stays ' + f.gf + '\u2013' + f.ga +
+      ', so goals for, against and difference are unchanged \u2014 only the win/loss column moves.</p>' +
+    '</div>' +
+    '<div class="modal-f"><button class="btn" data-close>Cancel</button>' +
+    '<button class="btn gold" id="soOK">Save</button></div>');
+  $('#soOK').onclick = function () {
+    f.so = $('#soV').value || null;
+    commit(); closeModal(); renderFixtures(); renderRecord(); renderDash();
+    toast(f.so === 'W' ? 'Recorded as a shootout win' : f.so === 'L' ? 'Recorded as a shootout loss' : 'Shootout cleared', 'ok');
+  };
 }
 
 function newTournament(i) {
@@ -1365,7 +1440,7 @@ function newTournament(i) {
     var n = $('#tN').value.trim(); if (!n) { toast('Give the tournament a name', 'err'); return; }
     var f = S.fixtures[i];
     f.comp = 'tournament'; f.tournament = n; f.friendly = false;
-    commit(); closeModal(); renderFixtures(); renderDash(); toast('Added to ' + n, 'ok');
+    commit(); closeModal(); renderFixtures(); renderRecord(); renderDash(); toast('Added to ' + n, 'ok');
   };
 }
 
@@ -1625,7 +1700,7 @@ function profile(id) {
     if (p.mom[i]) bits.push('MOM');
     var r = resultOf(f);
     return '<tr><td>' + esc(f.opponent) + '</td><td class="c num">' + (r ? f.gf + '–' + f.ga : '—') + '</td>' +
-      '<td class="c">' + (r ? '<span class="chip ' + (r === 'W' ? 'ok' : r === 'D' ? 'gold' : 'bad') + '">' + r + '</span>' : '—') + '</td>' +
+      '<td class="c" style="white-space:nowrap">' + (r ? resultChip(f) : '—') + '</td>' +
       '<td style="color:var(--gold-lt);font-weight:600">' + (bits.join(' · ') || '—') + '</td></tr>';
   }).join('');
 
@@ -1736,7 +1811,7 @@ var HA = [['H', 'Home'], ['A', 'Away'], ['N', 'Neutral'], ['', 'Not set']];
 
 function fixtureModal(i) {
   var isNew = (i == null);
-  var f = isNew ? { opponent: '', date: '', ha: 'H', venue: '', gf: null, ga: null, comp: 'league', tournament: '' } : S.fixtures[i];
+  var f = isNew ? { opponent: '', date: '', ha: 'H', venue: '', gf: null, ga: null, comp: 'league', tournament: '', so: null } : S.fixtures[i];
   openModal(
     '<div class="modal-h"><h3>' + (isNew ? 'Add fixture' : 'Edit fixture') + '</h3>' +
       '<button class="x" data-close>×</button></div>' +
@@ -1769,15 +1844,24 @@ function fixtureModal(i) {
           '<datalist id="xTList">' + tournamentNames().map(function (n) {
             return '<option value="' + esc(n) + '"></option>'; }).join('') + '</datalist></div>' +
       '</div>' +
+      '<div class="field" id="xSOWrap"' + (compOf(f) === 'tournament' ? '' : ' style="display:none"') + '>' +
+        '<label class="f">Shootout (drawn tournament games only)</label><select id="xSO">' +
+          '<option value="">\u2014 none \u2014</option>' +
+          '<option value="W"' + (f.so === 'W' ? ' selected' : '') + '>Won the shootout</option>' +
+          '<option value="L"' + (f.so === 'L' ? ' selected' : '') + '>Lost the shootout</option>' +
+        '</select></div>' +
       '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0">Leave the scores blank for a fixture that ' +
-      'hasn\u2019t been played \u2014 it shows as TBC and stays out of the season record.</p>' +
+      'hasn\u2019t been played \u2014 it shows as TBC and stays out of the season record. A shootout only applies ' +
+      'when a tournament game finishes level; it decides the win or loss without changing the goals.</p>' +
     '</div>' +
     '<div class="modal-f">' + (isNew ? '' : '<button class="btn danger" id="xDel">Delete</button>') +
       '<div class="spacer"></div><button class="btn" data-close>Cancel</button>' +
       '<button class="btn gold" id="xOK">' + (isNew ? 'Add fixture' : 'Save') + '</button></div>');
 
   $('#xC').onchange = function () {
-    $('#xTWrap').style.display = this.value === 'tournament' ? '' : 'none';
+    var t = this.value === 'tournament';
+    $('#xTWrap').style.display = t ? '' : 'none';
+    $('#xSOWrap').style.display = t ? '' : 'none';
   };
 
   $('#xOK').onclick = function () {
@@ -1789,7 +1873,8 @@ function fixtureModal(i) {
     var ga = $('#xGA').value === '' ? null : Math.max(0, +$('#xGA').value);
     var vals = { opponent: o, date: $('#xD').value, ha: $('#xH').value,
                  venue: $('#xV').value.trim(), gf: gf, ga: ga,
-                 comp: comp, tournament: tname, friendly: comp === 'friendly' };
+                 comp: comp, tournament: tname, friendly: comp === 'friendly',
+                 so: comp === 'tournament' ? ($('#xSO').value || null) : null };
     if (isNew) {
       vals.id = uid('f'); vals.no = S.fixtures.length + 1;
       S.fixtures.push(vals);
