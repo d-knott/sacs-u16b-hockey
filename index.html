@@ -857,15 +857,24 @@ function pullRemote(silent) {
       remoteOK = true;
       if (!rows.length || !rows[0].data) { return pushRemote(true).then(function () { return false; }); }
       var rd = rows[0].data;
-      if (!S || (rd.rev || 0) > (S.rev || 0)) {
+      var rRev  = rd.rev || 0,         lRev  = S ? (S.rev || 0) : -1;
+      var rSeed = rd.seedVersion || 0, lSeed = S ? (S.seedVersion || 0) : -1;
+
+      // A newer schema version always wins, whatever the rev counter says —
+      // otherwise a migrated local copy and a stale remote copy can sit on the
+      // same rev with different contents and neither side ever gives way.
+      if (!S || rSeed > lSeed || (rSeed === lSeed && rRev > lRev)) {
         S = normalise(rd); saveLocal();
         if (migrated) { migrated = false; pushRemote(); }
         if (!silent) toast('Synced from the shared database', 'ok');
         return true;
       }
-      // Local copy is ahead of the shared one (edits made offline, or a
-      // version migration applied on a previous visit) — publish it.
-      if ((S.rev || 0) > (rd.rev || 0)) pushRemote();
+      // Local copy is ahead (offline edits, or a migration applied earlier) —
+      // publish it, jumping clear of the remote counter.
+      if (lSeed > rSeed || lRev > rRev) {
+        if (S.rev <= rRev) S.rev = rRev;
+        pushRemote();
+      }
       return false;
     })
     .catch(function (e) {
