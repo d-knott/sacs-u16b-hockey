@@ -191,6 +191,8 @@ html[data-theme="dark"] .card{background:linear-gradient(170deg,rgba(255,255,255
 .chip.gold{color:var(--gold-lt);border-color:rgba(201,150,58,.4);background:rgba(201,150,58,.12)}
 .chip.mute{color:var(--ink-3)}
 .chip.bad{color:#F08D87;border-color:rgba(217,82,75,.35);background:rgba(217,82,75,.12)}
+.chip.cup{color:#F0C877;border-color:rgba(201,150,58,.45);background:rgba(201,150,58,.16);font-weight:700}
+html[data-theme="light"] .chip.cup{color:#8A6316;border-color:rgba(201,150,58,.5);background:rgba(201,150,58,.14)}
 .chip.jny{color:#9FB6FF;border-color:rgba(120,150,235,.4);background:rgba(120,150,235,.13);cursor:help}
 html[data-theme="light"] .chip.jny{color:#3B4FA8;border-color:rgba(74,58,167,.3);background:rgba(74,58,167,.09)}
 .pc-w{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:10px;
@@ -280,24 +282,24 @@ html[data-theme="light"] .lb-row:hover{background:rgba(11,27,51,.026)}
 .fp.L{background:rgba(217,82,75,.85)}.fp.x{background:var(--surface-3);color:var(--ink-3)}
 
 /* ============================== ATTENDANCE MATRIX ============================== */
-.mx{overflow:auto;max-height:calc(100vh - 164px);position:relative}
+.mx{overflow:auto;max-height:calc(100vh - 156px);position:relative}
 .mx table{border-collapse:separate;border-spacing:0}
 .mx th,.mx td{border-bottom:1px solid var(--line-soft);padding:0}
 .mx thead th{
   position:sticky;top:0;z-index:3;background:var(--surface-1);
-  padding:5px 2px;font-size:9.5px;letter-spacing:0;text-align:center;min-width:30px;
+  padding:4px 5px;font-size:10px;letter-spacing:.04em;text-align:center;min-width:38px;
   border-bottom:1px solid var(--line);
 }
 .mx .nmc{
-  position:sticky;left:0;z-index:2;background:var(--surface-1);min-width:174px;max-width:174px;
-  padding:3px 11px;border-right:1px solid var(--line);font-size:12.8px;font-weight:600;
+  position:sticky;left:0;z-index:2;background:var(--surface-1);min-width:170px;max-width:170px;
+  padding:3px 12px;border-right:1px solid var(--line);font-size:13.2px;font-weight:600;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .mx thead .nmc{z-index:4;text-align:left}
 .mx .totc{position:sticky;right:0;z-index:2;background:var(--surface-1);border-left:1px solid var(--line);
-  min-width:46px;text-align:center;font-family:var(--hd);font-weight:700;font-size:14px;color:var(--gold-lt)}
+  min-width:52px;text-align:center;font-family:var(--hd);font-weight:700;font-size:15px;color:var(--gold-lt)}
 .mx thead .totc{z-index:4;color:var(--ink-3);font-size:11.5px}
-.cel{width:100%;height:24px;display:grid;place-items:center;font-size:11.5px;font-weight:700;
+.cel{width:100%;height:24px;display:grid;place-items:center;font-size:12.5px;font-weight:700;
   transition:.1s;border-radius:4px;font-family:var(--hd)}
 .cel:hover{transform:scale(1.13);z-index:5;position:relative}
 .cel.v1{background:rgba(47,163,107,.24);color:#6ADCA4}
@@ -545,12 +547,16 @@ html[data-theme="dark"] .pc{background:linear-gradient(165deg,rgba(255,255,255,.
       <!-- ─────────── FIXTURES ─────────── -->
       <section class="page" id="p-fix">
         <div class="tiles" id="fixTiles" style="margin-bottom:18px"></div>
-        <div style="display:flex;align-items:center;margin-bottom:13px">
-          <div style="font-size:13px;color:var(--ink-2)">Type a score straight into the table — result and totals update instantly.</div>
+        <div style="display:flex;gap:11px;flex-wrap:wrap;align-items:center;margin-bottom:13px">
+          <div class="seg" id="compFilter"></div>
           <div class="spacer"></div>
           <button class="btn gold" id="btnAddFixture">+ Fixture</button>
         </div>
-        <div class="card"><div class="card-b flush"><div class="tw"><table id="fixTable"></table></div></div></div>
+        <div style="font-size:13px;color:var(--ink-2);margin-bottom:13px">
+          Scores, dates and competition can all be set straight in the table — everything updates instantly.
+        </div>
+        <div class="card" style="margin-bottom:16px"><div class="card-b flush"><div class="tw"><table id="fixTable"></table></div></div></div>
+        <div id="compBreak"></div>
       </section>
 
       <!-- ─────────── MATCH DAY ─────────── -->
@@ -659,6 +665,23 @@ var DEFAULT_WEIGHTS = {
 };
 
 var POSITIONS = ['GK', 'DEF', 'MID', 'FWD'];
+var COMPS = [['league', 'League'], ['tournament', 'Tournament'], ['friendly', 'Friendly']];
+
+function compOf(f) { return f.comp || (f.friendly ? 'friendly' : 'league'); }
+function compLabel(f) {
+  var c = compOf(f);
+  if (c === 'tournament') return f.tournament || 'Tournament';
+  if (c === 'friendly') return 'Friendly';
+  return 'League';
+}
+function tournamentNames() {
+  var seen = [], out = [];
+  S.fixtures.forEach(function (f) {
+    var n = (f.tournament || '').trim();
+    if (compOf(f) === 'tournament' && n && seen.indexOf(n) < 0) { seen.push(n); out.push(n); }
+  });
+  return out;
+}
 var CATS = [
   { k: 'training', lbl: 'Training',     v: '--s1' },
   { k: 'caps',     lbl: 'Match caps',   v: '--s2' },
@@ -726,6 +749,12 @@ function normalise(s) {
   if (!s.fixtures) s.fixtures = [];
   if (!s.players) s.players = [];
   var nS = s.sessions.length, nF = s.fixtures.length;
+
+  s.fixtures.forEach(function (f) {
+    if (!f.comp) f.comp = f.friendly ? 'friendly' : 'league';
+    if (f.comp !== 'tournament') f.tournament = '';
+    f.friendly = (f.comp === 'friendly');
+  });
 
   // squad-window metadata, seeded by name for state saved before it existed
   var seedBy = {};
@@ -830,9 +859,9 @@ function ranked(includeDropped) {
     .map(function (p) { var b = score(p); return { p: p, b: b }; })
     .sort(function (a, b) { return b.b.total - a.b.total || a.p.name.localeCompare(b.p.name); });
 }
-function seasonStats() {
+function seasonStats(list) {
   var played = 0, w = 0, d = 0, l = 0, gf = 0, ga = 0;
-  S.fixtures.forEach(function (f) {
+  (list || S.fixtures).forEach(function (f) {
     if (f.gf == null || f.ga == null) return;
     played++; gf += +f.gf; ga += +f.ga;
     if (+f.gf > +f.ga) w++; else if (+f.gf < +f.ga) l++; else d++;
@@ -923,7 +952,7 @@ function commit() {
 /* ═══════════════════════════════════════════════════════════════════════
    RENDER
    ═══════════════════════════════════════════════════════════════════════ */
-var view = { pos: 'ALL', sort: 'points', sqPos: 'ALL', dropped: false, mdFix: 0 };
+var view = { pos: 'ALL', sort: 'points', sqPos: 'ALL', dropped: false, mdFix: 0, comp: 'all' };
 
 function renderAll() {
   renderCounts(); renderRecord(); renderDash(); renderBoard(); renderSquad();
@@ -1202,9 +1231,29 @@ function renderTraining() {
 
 /* ── FIXTURES ── */
 function renderFixtures() {
-  var s = seasonStats();
+  // filter bar: All / League / each tournament / Friendly
+  var tn = tournamentNames();
+  var opts = [['all', 'All']].concat(
+    [['league', 'League']],
+    tn.map(function (n) { return ['t:' + n, n]; }),
+    [['friendly', 'Friendlies']]);
+  if (!opts.some(function (o) { return o[0] === view.comp; })) view.comp = 'all';
+  segInto('#compFilter', opts, view.comp, function (v) { view.comp = v; renderFixtures(); });
+
+  function inView(f) {
+    if (view.comp === 'all') return true;
+    if (view.comp.indexOf('t:') === 0) return compOf(f) === 'tournament' && (f.tournament || '') === view.comp.slice(2);
+    return compOf(f) === view.comp;
+  }
+  var shown = S.fixtures.filter(inView);
+  var s = seasonStats(shown);
+  var scope = view.comp === 'all' ? 'all fixtures'
+            : view.comp === 'league' ? 'league only'
+            : view.comp === 'friendly' ? 'friendlies only'
+            : view.comp.slice(2);
+
   $('#fixTiles').innerHTML = [
-    tile('Played', s.played, S.fixtures.length + ' scheduled', 'accent'),
+    tile('Played', s.played, shown.length + ' in ' + scope, 'accent'),
     tile('Won', s.w, s.pct + '% win rate', 'good'),
     tile('Drawn', s.d, ''),
     tile('Lost', s.l, '', 'bad'),
@@ -1213,20 +1262,63 @@ function renderFixtures() {
     tile('Diff', (s.gd > 0 ? '+' : '') + s.gd, '', 'accent')
   ].join('');
 
+  // per-competition summary, only worth showing once something is classified
+  var groups = [];
+  if (tn.length) {
+    groups.push({ k: 'League', list: S.fixtures.filter(function (f) { return compOf(f) === 'league'; }) });
+    tn.forEach(function (n) {
+      groups.push({ k: n, list: S.fixtures.filter(function (f) { return compOf(f) === 'tournament' && f.tournament === n; }) });
+    });
+    var fr = S.fixtures.filter(function (f) { return compOf(f) === 'friendly'; });
+    if (fr.length) groups.push({ k: 'Friendlies', list: fr });
+  }
+  $('#compBreak').innerHTML = groups.length
+    ? '<div class="card"><div class="card-h"><h3>By competition</h3></div>' +
+      '<div class="card-b flush"><div class="tw"><table><thead><tr><th>Competition</th>' +
+      '<th class="n">P</th><th class="n">W</th><th class="n">D</th><th class="n">L</th>' +
+      '<th class="n">GF</th><th class="n">GA</th><th class="n">GD</th></tr></thead><tbody>' +
+      groups.map(function (g) {
+        var t = seasonStats(g.list);
+        return '<tr><td><b style="font-weight:600">' + esc(g.k) + '</b></td>' +
+          '<td class="n">' + t.played + '</td><td class="n" style="color:#5FD39B">' + t.w + '</td>' +
+          '<td class="n">' + t.d + '</td><td class="n" style="color:#F08D87">' + t.l + '</td>' +
+          '<td class="n">' + t.gf + '</td><td class="n">' + t.ga + '</td>' +
+          '<td class="n" style="font-weight:600">' + (t.gd > 0 ? '+' : '') + t.gd + '</td></tr>';
+      }).join('') + '</tbody></table></div></div></div>'
+    : '';
+
+  // inline competition picker: league / friendly / each existing tournament / new
+  function compSelect(f, i) {
+    var cur = compOf(f) === 'tournament' ? 't:' + (f.tournament || '') : compOf(f);
+    var o = [['league', 'League'], ['friendly', 'Friendly']]
+      .concat(tn.map(function (n) { return ['t:' + n, n]; }))
+      .concat([['new', '+ New tournament…']]);
+    if (compOf(f) === 'tournament' && tn.indexOf(f.tournament || '') < 0) o.splice(2, 0, [cur, f.tournament || 'Tournament']);
+    return '<select data-comp="' + i + '" style="padding:4px 6px;font-size:12.5px;min-width:118px">' +
+      o.map(function (x) {
+        return '<option value="' + esc(x[0]) + '"' + (x[0] === cur ? ' selected' : '') + '>' + esc(x[1]) + '</option>';
+      }).join('') + '</select>';
+  }
+
   $('#fixTable').innerHTML =
     '<thead><tr><th class="c" style="width:38px">#</th><th>Opponent</th><th>Date</th>' +
+    '<th>Competition</th>' +
     '<th class="c">H/A</th><th>Venue</th><th class="c" style="width:70px">GF</th>' +
     '<th class="c" style="width:70px">GA</th><th class="c">GD</th><th class="c">Result</th>' +
     '<th style="width:62px"></th></tr></thead><tbody>' +
-    S.fixtures.map(function (f, i) {
+    (shown.length ? shown.map(function (f) {
+      var i = S.fixtures.indexOf(f);
       var r = resultOf(f), gd = (f.gf == null || f.ga == null) ? null : f.gf - f.ga;
+      var c = compOf(f);
       return '<tr>' +
         '<td class="c num" style="color:var(--ink-3)">' + (i + 1) + '</td>' +
         '<td><b style="font-weight:600">' + esc(f.opponent) + '</b>' +
-          (f.friendly ? ' <span class="chip mute">Friendly</span>' : '') + '</td>' +
+          (c === 'tournament' ? ' <span class="chip cup">' + esc(f.tournament || 'Tournament') + '</span>' : '') +
+          (c === 'friendly' ? ' <span class="chip mute">Friendly</span>' : '') + '</td>' +
         '<td><input type="date" data-f="' + i + '" data-k="date" value="' + esc(f.date || '') +
           '" style="padding:5px 7px;font-size:13px;min-width:132px' +
           (f.date ? '' : ';border-color:var(--gold-dk)') + '"></td>' +
+        '<td>' + compSelect(f, i) + '</td>' +
         '<td class="c"><span class="chip">' + (f.ha || '—') + '</span></td>' +
         '<td style="color:var(--ink-2)">' + esc(f.venue || '—') + '</td>' +
         '<td class="c"><input type="number" min="0" data-f="' + i + '" data-k="gf" value="' + (f.gf == null ? '' : f.gf) + '" style="text-align:center;padding:5px"></td>' +
@@ -1236,7 +1328,7 @@ function renderFixtures() {
         '<td class="c">' + (r ? '<span class="chip ' + (r === 'W' ? 'ok' : r === 'D' ? 'gold' : 'bad') + '">' + r + '</span>' : '<span class="chip mute">TBC</span>') + '</td>' +
         '<td class="c" style="white-space:nowrap">' +
           '<button class="btn sm" data-editf="' + i + '">Edit</button></td></tr>';
-    }).join('') + '</tbody>';
+    }).join('') : '<tr><td colspan="11" class="empty">No fixtures in this competition.</td></tr>') + '</tbody>';
 
   $$('#fixTable input').forEach(function (inp) {
     inp.onchange = function () {
@@ -1246,9 +1338,35 @@ function renderFixtures() {
       commit(); renderFixtures(); renderRecord(); renderDash(); renderMatch();
     };
   });
+  $$('#fixTable [data-comp]').forEach(function (sel) {
+    sel.onchange = function () {
+      var f = S.fixtures[+sel.dataset.comp], v = sel.value;
+      if (v === 'new') { renderFixtures(); newTournament(+sel.dataset.comp); return; }
+      if (v.indexOf('t:') === 0) { f.comp = 'tournament'; f.tournament = v.slice(2); }
+      else { f.comp = v; f.tournament = ''; }
+      f.friendly = (f.comp === 'friendly');
+      commit(); renderFixtures(); renderDash();
+    };
+  });
   $$('#fixTable [data-editf]').forEach(function (b) {
     b.onclick = function () { fixtureModal(+b.dataset.editf); };
   });
+}
+
+function newTournament(i) {
+  openModal('<div class="modal-h"><h3>New tournament</h3><button class="x" data-close>×</button></div>' +
+    '<div class="modal-b"><div class="field" style="margin:0"><label class="f">Tournament name</label>' +
+    '<input type="text" id="tN" placeholder="e.g. Belgotex Tournament"></div>' +
+    '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0">Once it exists you can assign other ' +
+    'fixtures to it straight from the Competition column.</p></div>' +
+    '<div class="modal-f"><button class="btn" data-close>Cancel</button>' +
+    '<button class="btn gold" id="tOK">Create</button></div>');
+  $('#tOK').onclick = function () {
+    var n = $('#tN').value.trim(); if (!n) { toast('Give the tournament a name', 'err'); return; }
+    var f = S.fixtures[i];
+    f.comp = 'tournament'; f.tournament = n; f.friendly = false;
+    commit(); closeModal(); renderFixtures(); renderDash(); toast('Added to ' + n, 'ok');
+  };
 }
 
 /* ── MATCH DAY ── */
@@ -1618,7 +1736,7 @@ var HA = [['H', 'Home'], ['A', 'Away'], ['N', 'Neutral'], ['', 'Not set']];
 
 function fixtureModal(i) {
   var isNew = (i == null);
-  var f = isNew ? { opponent: '', date: '', ha: 'H', venue: '', gf: null, ga: null, friendly: false } : S.fixtures[i];
+  var f = isNew ? { opponent: '', date: '', ha: 'H', venue: '', gf: null, ga: null, comp: 'league', tournament: '' } : S.fixtures[i];
   openModal(
     '<div class="modal-h"><h3>' + (isNew ? 'Add fixture' : 'Edit fixture') + '</h3>' +
       '<button class="x" data-close>×</button></div>' +
@@ -1640,8 +1758,17 @@ function fixtureModal(i) {
         '<div class="field"><label class="f">Goals against</label>' +
           '<input type="number" min="0" id="xGA" value="' + (f.ga == null ? '' : f.ga) + '" placeholder="—"></div>' +
       '</div>' +
-      '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)">' +
-        '<input type="checkbox" id="xF" style="width:auto"' + (f.friendly ? ' checked' : '') + '> Friendly</label>' +
+      '<div class="row2">' +
+        '<div class="field"><label class="f">Competition</label><select id="xC">' +
+          COMPS.map(function (c) {
+            return '<option value="' + c[0] + '"' + (compOf(f) === c[0] ? ' selected' : '') + '>' + c[1] + '</option>';
+          }).join('') + '</select></div>' +
+        '<div class="field" id="xTWrap"' + (compOf(f) === 'tournament' ? '' : ' style="display:none"') + '>' +
+          '<label class="f">Tournament name</label>' +
+          '<input type="text" id="xT" list="xTList" value="' + esc(f.tournament || '') + '" placeholder="e.g. Belgotex Tournament">' +
+          '<datalist id="xTList">' + tournamentNames().map(function (n) {
+            return '<option value="' + esc(n) + '"></option>'; }).join('') + '</datalist></div>' +
+      '</div>' +
       '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0">Leave the scores blank for a fixture that ' +
       'hasn\u2019t been played \u2014 it shows as TBC and stays out of the season record.</p>' +
     '</div>' +
@@ -1649,12 +1776,20 @@ function fixtureModal(i) {
       '<div class="spacer"></div><button class="btn" data-close>Cancel</button>' +
       '<button class="btn gold" id="xOK">' + (isNew ? 'Add fixture' : 'Save') + '</button></div>');
 
+  $('#xC').onchange = function () {
+    $('#xTWrap').style.display = this.value === 'tournament' ? '' : 'none';
+  };
+
   $('#xOK').onclick = function () {
     var o = $('#xO').value.trim(); if (!o) { toast('Name the opponent', 'err'); return; }
+    var comp = $('#xC').value;
+    var tname = comp === 'tournament' ? $('#xT').value.trim() : '';
+    if (comp === 'tournament' && !tname) { toast('Name the tournament', 'err'); return; }
     var gf = $('#xGF').value === '' ? null : Math.max(0, +$('#xGF').value);
     var ga = $('#xGA').value === '' ? null : Math.max(0, +$('#xGA').value);
     var vals = { opponent: o, date: $('#xD').value, ha: $('#xH').value,
-                 venue: $('#xV').value.trim(), gf: gf, ga: ga, friendly: $('#xF').checked };
+                 venue: $('#xV').value.trim(), gf: gf, ga: ga,
+                 comp: comp, tournament: tname, friendly: comp === 'friendly' };
     if (isNew) {
       vals.id = uid('f'); vals.no = S.fixtures.length + 1;
       S.fixtures.push(vals);
