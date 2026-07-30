@@ -1652,7 +1652,7 @@ $('#notesBody').innerHTML = window.__NOTES__ || '';
 
   var local = loadLocal();
   S = normalise(local || freshState());
-  if (migrated) { saveLocal(); migrated = false; }
+  if (migrated) { migrated = false; commit(); }   // persist AND push the correction
   renderAll();
   go((location.hash || '#dash').slice(1));
 
