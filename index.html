@@ -863,6 +863,9 @@ function pullRemote(silent) {
         if (!silent) toast('Synced from the shared database', 'ok');
         return true;
       }
+      // Local copy is ahead of the shared one (edits made offline, or a
+      // version migration applied on a previous visit) — publish it.
+      if ((S.rev || 0) > (rd.rev || 0)) pushRemote();
       return false;
     })
     .catch(function (e) {
