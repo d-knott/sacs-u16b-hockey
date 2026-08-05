@@ -191,6 +191,8 @@ html[data-theme="dark"] .card{background:linear-gradient(170deg,rgba(255,255,255
 .chip.gold{color:var(--gold-lt);border-color:rgba(201,150,58,.4);background:rgba(201,150,58,.12)}
 .chip.mute{color:var(--ink-3)}
 .chip.bad{color:#F08D87;border-color:rgba(217,82,75,.35);background:rgba(217,82,75,.12)}
+.chip.away{color:#8DA3C2;border-color:rgba(141,163,194,.4);
+  background:repeating-linear-gradient(135deg,rgba(141,163,194,.16) 0 4px,transparent 4px 8px)}
 .chip.so{color:#9FB6FF;border-color:rgba(120,150,235,.45);background:rgba(120,150,235,.16);font-weight:700;
   letter-spacing:.09em;padding:2.5px 6px}
 html[data-theme="light"] .chip.so{color:#3B4FA8;border-color:rgba(74,58,167,.32);background:rgba(74,58,167,.1)}
@@ -293,7 +295,7 @@ html[data-theme="light"] .lb-row:hover{background:rgba(11,27,51,.026)}
 .mx th,.mx td{border-bottom:1px solid var(--line-soft);padding:0}
 .mx thead th{
   position:sticky;top:0;z-index:3;background:var(--surface-1);
-  padding:4px 5px;font-size:10px;letter-spacing:.04em;text-align:center;min-width:38px;
+  padding:2px 3px;font-size:10px;letter-spacing:.04em;text-align:center;min-width:38px;
   border-bottom:1px solid var(--line);
 }
 .mx .nmc{
@@ -313,6 +315,13 @@ html[data-theme="light"] .lb-row:hover{background:rgba(11,27,51,.026)}
 .cel.vL{background:rgba(201,150,58,.26);color:#EFC783}
 .cel.v0{background:rgba(217,82,75,.15);color:#E5877F}
 .cel.vN{color:var(--ink-3);opacity:.3}
+.cel.vX{background:repeating-linear-gradient(135deg,rgba(148,163,184,.14) 0 4px,transparent 4px 8px);
+  color:#8DA3C2;border:1px dashed rgba(141,163,194,.35)}
+html[data-theme="light"] .cel.vX{background:repeating-linear-gradient(135deg,rgba(100,116,139,.13) 0 4px,transparent 4px 8px);
+  color:#64748B;border-color:rgba(100,116,139,.3)}
+.sesh{font:inherit;color:inherit;padding:2px 3px;border-radius:5px;transition:.12s;white-space:nowrap;
+  font-family:var(--hd);font-weight:700;letter-spacing:.04em}
+.sesh:hover{background:var(--surface-3);color:var(--gold-lt)}
 .mx tbody tr:hover .nmc{background:var(--surface-3)}
 /* make the frozen columns read as frozen: an edge shadow once there's
    something scrolled underneath them */
@@ -550,6 +559,8 @@ html[data-theme="dark"] .pc{background:linear-gradient(165deg,rgba(255,255,255,.
             <span class="chip ok">Present +1</span>
             <span class="chip gold">Late −1</span>
             <span class="chip bad">Absent 0</span>
+            <span class="chip away">A/C side</span>
+            &nbsp;·&nbsp; click a date to rename or remove it
           </div>
           <div class="spacer"></div>
           <button class="btn gold" id="btnAddSession">+ Session</button>
@@ -709,7 +720,7 @@ function $(s, r) { return (r || document).querySelector(s); }
 function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
 function el(t, c, h) { var e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
-function sum(a) { var t = 0; for (var i = 0; i < (a || []).length; i++) if (a[i]) t += a[i]; return t; }
+function sum(a) { var t = 0; for (var i = 0; i < (a || []).length; i++) if (typeof a[i] === 'number' && a[i]) t += a[i]; return t; }
 function cnt(a) { var t = 0; for (var i = 0; i < (a || []).length; i++) if (a[i]) t++; return t; }
 function uid(p) { return (p || 'x') + Math.random().toString(36).slice(2, 9); }
 function initials(n) {
@@ -819,9 +830,16 @@ function normalise(s) {
 function clamp(v, lo, hi) { v = +v; if (isNaN(v)) v = lo; return Math.max(lo, Math.min(hi, v)); }
 
 /* ── squad-window helpers (descriptive only — these never affect points) ── */
-function availS(p) { return Math.max(0, p.sTo - p.sFrom + 1); }
+function awayS(p) {          // marked as playing for the A or C side that week
+  var c = 0; for (var i = p.sFrom; i <= p.sTo && i < p.att.length; i++) if (p.att[i] === 'X') c++;
+  return c;
+}
+function availS(p) { return Math.max(0, (p.sTo - p.sFrom + 1) - awayS(p)); }
 function presentS(p) {
-  var c = 0; for (var i = p.sFrom; i <= p.sTo && i < p.att.length; i++) if (p.att[i] > 0) c++;
+  var c = 0;
+  for (var i = p.sFrom; i <= p.sTo && i < p.att.length; i++) {
+    if (typeof p.att[i] === 'number' && p.att[i] > 0) c++;
+  }
   return c;
 }
 function rateS(p) { var a = availS(p); return a ? Math.round(presentS(p) / a * 100) : 0; }
@@ -849,7 +867,7 @@ function fit(arr, n) {
 function trainingPts(p) {
   var w = S.weights, t = 0;
   (p.att || []).forEach(function (v) {
-    if (v == null) return;
+    if (typeof v !== 'number') return;      // blank, or away with the A/C side
     if (v < 0) t += w.late * Math.abs(v);
     else t += w.training * v;
   });
@@ -1101,7 +1119,7 @@ function renderAttChart() {
   var n = S.sessions.length;
   if (!n) { $('#attChart').innerHTML = '<div class="empty">No sessions yet.</div>'; return; }
   var counts = S.sessions.map(function (_, i) {
-    var c = 0; S.players.forEach(function (p) { if (p.att[i] && p.att[i] > 0) c++; }); return c;
+    var c = 0; S.players.forEach(function (p) { if (typeof p.att[i] === 'number' && p.att[i] > 0) c++; }); return c;
   });
   var max = Math.max.apply(null, counts.concat([1]));
   var W = 1000, H = 170, PADB = 26, PADT = 8, gap = 2;
@@ -1233,23 +1251,53 @@ function renderSquad() {
 function st(v, l) { return '<div><b class="num">' + v + '</b><span>' + l + '</span></div>'; }
 
 /* ── TRAINING MATRIX ── */
+/* attendance cell states, in click order */
+var ATT_STATES = [
+  { v: null, cls: 'vN', txt: '·', lbl: 'Not recorded' },
+  { v: 1,    cls: 'v1', txt: '✓', lbl: 'Present' },
+  { v: -1,   cls: 'vL', txt: 'L', lbl: 'Late' },
+  { v: 0,    cls: 'v0', txt: '✕', lbl: 'Absent' },
+  { v: 'X',  cls: 'vX', txt: '–', lbl: 'With the A or C side' }
+];
+function attState(v) {
+  if (v === 'X') return ATT_STATES[4];
+  if (v == null) return ATT_STATES[0];
+  if (v < 0) return ATT_STATES[2];
+  if (v === 0) return ATT_STATES[3];
+  return { v: v, cls: v > 1 ? 'v2' : 'v1', txt: v > 1 ? String(v) : '✓', lbl: 'Present' };
+}
+function nextAtt(v) {
+  if (v == null) return 1;
+  if (v === 'X') return null;
+  if (v > 0) return -1;
+  if (v < 0) return 0;
+  return 'X';                       // 0 -> away -> blank
+}
+
 function renderTraining() {
   var ss = S.sessions, ps = S.players.filter(function (p) { return p.status !== 'Dropped'; });
-  if (!ss.length) { $('#attMatrix').innerHTML = '<div class="empty">No sessions yet — add one to start tracking.</div>'; return; }
+  if (!ss.length) {
+    $('#attMatrix').innerHTML = '<div class="empty">No sessions yet — add one to start tracking.</div>';
+    return;
+  }
   var h = '<table><thead><tr><th class="nmc">Player</th>' +
-    ss.map(function (s) { return '<th>' + esc(s.label) + '</th>'; }).join('') +
+    ss.map(function (x, i) {
+      return '<th><button class="sesh" data-sesh="' + i + '" title="' + esc(x.label) +
+        ' — click to rename or remove">' + esc(x.label) + '</button></th>';
+    }).join('') +
     '<th class="totc">TOT</th></tr></thead><tbody>';
   ps.forEach(function (p) {
     h += '<tr><td class="nmc" title="' + esc(p.name) + '">' + esc(p.name) + '</td>';
     p.att.forEach(function (v, i) {
-      var cls = v == null ? 'vN' : v < 0 ? 'vL' : v === 0 ? 'v0' : v > 1 ? 'v2' : 'v1';
-      var txt = v == null ? '·' : v < 0 ? 'L' : v === 0 ? '✕' : v > 1 ? v : '✓';
-      h += '<td><button class="cel ' + cls + '" data-p="' + p.id + '" data-i="' + i + '" ' +
-           'aria-label="' + esc(p.name + ' — ' + ss[i].label) + '">' + txt + '</button></td>';
+      var st = attState(v);
+      h += '<td><button class="cel ' + st.cls + '" data-p="' + p.id + '" data-i="' + i + '" ' +
+           'aria-label="' + esc(p.name + ' — ' + ss[i].label + ' — ' + st.lbl) + '" ' +
+           'title="' + esc(st.lbl) + '">' + st.txt + '</button></td>';
     });
     h += '<td class="totc num">' + sum(p.att) + '</td></tr>';
   });
   h += '</tbody></table>';
+
   var mxEl = $('#attMatrix');
   mxEl.innerHTML = h;
   // Open on the most recent sessions — that's what you're marking off today —
@@ -1260,14 +1308,56 @@ function renderTraining() {
     attTouched = true; attLeft = mxEl.scrollLeft;
   };
   placeMatrix();
+
   $$('.cel', mxEl).forEach(function (c) {
     c.onclick = function () {
       var p = S.players.filter(function (x) { return x.id === c.dataset.p; })[0];
-      var i = +c.dataset.i, v = p.att[i];
-      p.att[i] = v == null ? 1 : v === 1 ? -1 : v === -1 ? 0 : null;
+      var i = +c.dataset.i;
+      p.att[i] = nextAtt(p.att[i]);
       commit(); renderTraining(); renderRecord(); renderDash(); renderBoard(); renderSquad();
     };
   });
+  $$('[data-sesh]', mxEl).forEach(function (b) {
+    b.onclick = function () { sessionModal(+b.dataset.sesh); };
+  });
+}
+
+function sessionModal(i) {
+  var ses = S.sessions[i];
+  var marked = S.players.filter(function (p) { return p.att[i] != null; }).length;
+  openModal(
+    '<div class="modal-h"><h3>Session ' + (i + 1) + '</h3><button class="x" data-close>×</button></div>' +
+    '<div class="modal-b">' +
+      '<div class="field"><label class="f">Label</label>' +
+        '<input type="text" id="seL" value="' + esc(ses.label) + '" placeholder="e.g. 04/08"></div>' +
+      '<div class="field" style="margin:0"><label class="f">Date (optional)</label>' +
+        '<input type="date" id="seD" value="' + esc(ses.date || '') + '"></div>' +
+      '<p style="font-size:12.5px;color:var(--ink-3);margin:12px 0 0">' + marked +
+      ' of ' + S.players.length + ' players have something recorded for this session.</p>' +
+    '</div>' +
+    '<div class="modal-f"><button class="btn danger" id="seDel">Delete session</button>' +
+      '<div class="spacer"></div><button class="btn" data-close>Cancel</button>' +
+      '<button class="btn gold" id="seOK">Save</button></div>');
+
+  $('#seOK').onclick = function () {
+    var l = $('#seL').value.trim();
+    if (!l) { toast('Give the session a label', 'err'); return; }
+    ses.label = l; ses.date = $('#seD').value || '';
+    commit(); closeModal(); renderTraining(); renderDash(); toast('Session updated', 'ok');
+  };
+  $('#seDel').onclick = function () {
+    closeModal();
+    confirmBox('Delete session', 'Remove \u201c' + ses.label + '\u201d? Every player\u2019s attendance for ' +
+      'that session is deleted with it, and their points will drop accordingly.', function () {
+      S.sessions.splice(i, 1);
+      S.players.forEach(function (p) {
+        p.att.splice(i, 1);
+        if (p.sFrom > i) p.sFrom--;
+        if (p.sTo >= i) p.sTo--;
+      });
+      commit(); renderAll(); toast('Session removed');
+    });
+  };
 }
 
 /* ── FIXTURES ── */
@@ -1705,9 +1795,9 @@ function profile(id) {
   }).join('');
 
   var last8 = p.att.slice(-8).map(function (v) {
-    var c = v == null ? 'x' : v < 0 ? 'D' : v === 0 ? 'L' : 'W';
-    var t = v == null ? '·' : v < 0 ? 'L' : v === 0 ? '✕' : '✓';
-    return '<div class="fp ' + c + '">' + t + '</div>';
+    var c = v === 'X' ? 'x' : v == null ? 'x' : v < 0 ? 'D' : v === 0 ? 'L' : 'W';
+    var t = v === 'X' ? '–' : v == null ? '·' : v < 0 ? 'L' : v === 0 ? '✕' : '✓';
+    return '<div class="fp ' + c + '" title="' + (v === 'X' ? 'With another side' : '') + '">' + t + '</div>';
   }).join('');
 
   openModal(
@@ -1795,11 +1885,13 @@ $('#btnAddSession').onclick = function () {
   openModal('<div class="modal-h"><h3>Add training session</h3><button class="x" data-close>×</button></div>' +
     '<div class="modal-b"><div class="field"><label class="f">Label</label>' +
     '<input type="text" id="sL" placeholder="e.g. 04/08"></div>' +
-    '<p style="font-size:13px;color:var(--ink-3);margin:0">A new empty column is added to the attendance matrix.</p></div>' +
+    '<div class="field" style="margin:0"><label class="f">Date (optional)</label><input type="date" id="sD"></div>' +
+    '<p style="font-size:13px;color:var(--ink-3);margin:12px 0 0">A new empty column is added to the matrix. ' +
+    'You can rename or remove it later by clicking its heading.</p></div>' +
     '<div class="modal-f"><button class="btn" data-close>Cancel</button><button class="btn gold" id="sOK">Add</button></div>');
   $('#sOK').onclick = function () {
     var l = $('#sL').value.trim(); if (!l) { toast('Give it a label', 'err'); return; }
-    S.sessions.push({ id: uid('s'), label: l });
+    S.sessions.push({ id: uid('s'), label: l, date: $('#sD') ? $('#sD').value : '' });
     S.players.forEach(function (p) { p.att.push(null); });
     commit(); closeModal(); renderAll(); toast('Session added', 'ok');
   };
